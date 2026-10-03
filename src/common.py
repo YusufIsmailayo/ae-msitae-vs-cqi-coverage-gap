@@ -126,3 +126,16 @@ def read_op_summary1() -> pd.DataFrame:
     for c in x.columns[1:]:
         x[c] = pd.to_numeric(x[c])
     return x
+
+
+ECDS_NATIONAL = BRONZE / "ae" / "AE2526_ECDS_National_Data_Tables.xlsx"
+
+
+def read_ecds_imd() -> pd.DataFrame:
+    """IMD decile rows from the ECDS National Report Tables, 'Demographics' sheet (annual rows only)."""
+    d = pd.read_excel(ECDS_NATIONAL, sheet_name="Demographics", header=None).iloc[10:].copy()
+    d.columns = ["period", "demographic_type", "group", "attendances", "population", "rate_per_100k"]
+    d = d[(d.demographic_type == "Imd_Decile") & d.period.astype(str).str.contains("/")].copy()
+    for col in ["attendances", "population", "rate_per_100k"]:
+        d[col] = pd.to_numeric(d[col], errors="coerce")
+    return d.drop(columns="demographic_type").reset_index(drop=True)

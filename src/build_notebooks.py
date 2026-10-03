@@ -25,6 +25,8 @@ urls = {
     'hosp-epis-stat-outp-rep-tabs-2025-26-tab.xlsx': 'https://files.digital.nhs.uk/3A/DC44DE/hosp-epis-stat-outp-rep-tabs-2025-26-tab.xlsx',
     'hosp-epis-stat-outp-all-firs-atte-2025-26-data.csv': 'https://files.digital.nhs.uk/BC/881240/hosp-epis-stat-outp-all-firs-atte-2025-26-data.csv',
     'hosp-epis-stat-outp-eth-imd-dec-2025-26-data.csv': 'https://files.digital.nhs.uk/41/3F7E90/hosp-epis-stat-outp-eth-imd-dec-2025-26-data.csv',
+    'AE2526_ECDS_Summary_Report_Tables.xlsx': 'https://files.digital.nhs.uk/36/B35E68/AE2526_ECDS_Summary_Report_Tables.xlsx',
+    'AE2526_ECDS_National_Data_Tables.xlsx': 'https://files.digital.nhs.uk/70/666D19/AE2526_ECDS_National_Data_Tables.xlsx',
     'hosp-epis-stat-outp-meta-2025-26-tab.xlsx': 'https://files.digital.nhs.uk/15/578BB6/hosp-epis-stat-outp-meta-2025-26-tab.xlsx',
 }
 for line in (c.BRONZE / 'msitae_monthly' / 'urls.txt').read_text().split():
@@ -295,5 +297,55 @@ print('revised providers that CQI includes:', len(inc), '| CQI equals FINAL:', i
 print('all CQI provider-months in these six months: equals final', int(res.cqi_equals_final.sum()), 'of', int(res.cqi_providers.sum()), '| equals provisional', int(res.cqi_equals_prov.sum()))"""),
     ("code", """res.to_parquet(c.GOLD / 'provisional_vs_final_monthly.parquet', index=False)
 revised.to_parquet(c.GOLD / 'provisional_vs_final_revised_providers.parquet', index=False)"""),
+])
+
+# ---------------------------------------------------------------- 07
+build("07_deprivation_ratio.ipynb", [
+    ("md", """# 07 The 1.85x deprivation ratio
+The release says A&E attendance rates for the most deprived areas were 1.85 times those of the least deprived (source: ECDS). I rebuild it from the ECDS National Report Tables. The 13.6 MB workbook is not in the repository; if it is absent this notebook reads the small Silver table it wrote the first time, and says so."""),
+    ("code", HEAD),
+    ("code", """if c.ECDS_NATIONAL.exists():
+    imd = c.read_ecds_imd(); imd.to_parquet(c.SILVER / 'ecds_imd_decile.parquet', index=False); print('read from Bronze workbook')
+else:
+    imd = pd.read_parquet(c.SILVER / 'ecds_imd_decile.parquet'); print('Bronze workbook not present; read the committed Silver table')
+imd[imd.period == '2025/26']"""),
+    ("code", """# Internal check: the ten deciles plus the unknown-IMD attendances must sum to the published total.
+cur = imd[imd.period == '2025/26'].set_index('group')
+deciles = cur.drop(['Unknown', 'IMD_DECILE_TOTAL'])
+print('deciles + unknown =', int(deciles.attendances.sum() + cur.loc['Unknown', 'attendances']), '| published total', int(cur.loc['IMD_DECILE_TOTAL', 'attendances']))
+assert deciles.attendances.sum() + cur.loc['Unknown', 'attendances'] == cur.loc['IMD_DECILE_TOTAL', 'attendances']
+print('unknown-IMD share of attendances: %.2f%%' % (100 * cur.loc['Unknown', 'attendances'] / cur.loc['IMD_DECILE_TOTAL', 'attendances']))
+print('rate rises at every step from least to most deprived:', deciles.rate_per_100k.is_monotonic_increasing)"""),
+    ("code", """rows = []
+for yr, g in imd.groupby('period'):
+    g = g.set_index('group'); mo, le = g.loc['Most deprived 10%'], g.loc['Least deprived 10%']
+    rows.append({'year': yr, 'most_attendances': mo.attendances, 'least_attendances': le.attendances,
+                 'most_population': mo.population, 'least_population': le.population,
+                 'ratio_published_rates': mo.rate_per_100k / le.rate_per_100k,
+                 'ratio_rebuilt_from_counts': (mo.attendances / mo.population) / (le.attendances / le.population),
+                 'ratio_of_raw_counts': mo.attendances / le.attendances})
+ratio = pd.DataFrame(rows)
+ratio.round(4)"""),
+    ("code", """# The gate for this notebook: the published statement is 1.85, and I expect to reproduce it from the counts as well as the rates.
+r = ratio.set_index('year').loc['2025/26']
+print('published-rate ratio %.4f | rebuilt from counts %.4f' % (r.ratio_published_rates, r.ratio_rebuilt_from_counts))
+assert round(r.ratio_published_rates, 2) == 1.85 and abs(r.ratio_published_rates - r.ratio_rebuilt_from_counts) < 1e-3"""),
+    ("md", "## The 2025/26 population update\nThe decile populations changed in 2025/26, so part of the apparent fall from 2024/25 is a denominator effect. I hold the populations constant in each direction to see how much."),
+    ("code", """a, b = ratio.set_index('year').loc['2024/25'], ratio.set_index('year').loc['2025/26']
+def rr(att_m, pop_m, att_l, pop_l): return (att_m / pop_m) / (att_l / pop_l)
+sens = pd.Series({
+    '2024/25 counts, 2024/25 populations': rr(a.most_attendances, a.most_population, a.least_attendances, a.least_population),
+    '2024/25 counts, 2025/26 populations': rr(a.most_attendances, b.most_population, a.least_attendances, b.least_population),
+    '2025/26 counts, 2024/25 populations': rr(b.most_attendances, a.most_population, b.least_attendances, a.least_population),
+    '2025/26 counts, 2025/26 populations': rr(b.most_attendances, b.most_population, b.least_attendances, b.least_population)})
+sens.round(4)"""),
+    ("code", """# The outpatient file uses the same IMD populations; I confirm that rather than assume it.
+op5 = pd.read_excel(c.OP_REPORT, sheet_name='Summary Report 5', header=7).iloc[:10]
+op_pop = op5.set_index(op5.columns[0])['National population per IMD decile']
+print('most deprived  ECDS', int(b.most_population), '| outpatient', int(op_pop['Most deprived 10%']))
+print('least deprived ECDS', int(b.least_population), '| outpatient', int(op_pop['Less deprived 10%']))
+assert b.most_population == op_pop['Most deprived 10%'] and b.least_population == op_pop['Less deprived 10%']"""),
+    ("code", """ratio.to_parquet(c.GOLD / 'deprivation_ratio_by_year.parquet', index=False)
+sens.rename('ratio').reset_index().rename(columns={'index': 'scenario'}).to_parquet(c.GOLD / 'deprivation_ratio_population_sensitivity.parquet', index=False)"""),
 ])
 print('built')
