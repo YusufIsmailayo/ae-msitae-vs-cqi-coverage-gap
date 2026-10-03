@@ -44,12 +44,12 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def read_msitae_monthly() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (provider-month rows, each file's own TOTAL row)."""
+def read_msitae_monthly(folder: str = "msitae_monthly") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (provider-month rows, each file's own TOTAL row) for the CSVs in a Bronze folder."""
     frames = []
-    for f in sorted(glob.glob(str(BRONZE / "msitae_monthly" / "*.csv"))):
+    for f in sorted(glob.glob(str(BRONZE / folder / "*.csv"))):
         d = pd.read_csv(f)
-        period = d.loc[d["Org Code"] != "TOTAL", "Period"].iloc[0]
+        period = d.loc[d["Org Code"].astype(str).str.strip() != "TOTAL", "Period"].iloc[0]
         d["month"] = pd.to_datetime(period.replace("MSitAE-", "").title(), format="%B-%Y").strftime("%Y-%m")
         d["source_file"] = Path(f).name
         frames.append(d)

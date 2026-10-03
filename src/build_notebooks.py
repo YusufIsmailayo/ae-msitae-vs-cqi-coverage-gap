@@ -29,6 +29,9 @@ urls = {
 }
 for line in (c.BRONZE / 'msitae_monthly' / 'urls.txt').read_text().split():
     urls[line.rsplit('/', 1)[-1]] = line
+# Provisional files came from the Internet Archive; I record the capture timestamp in the URL itself.
+for line in (c.BRONZE / 'msitae_provisional' / 'archive_sources.tsv').read_text().splitlines():
+    name, stamp, url = line.split('\t'); urls[name] = url
 
 rows = []
 for p in sorted(c.BRONZE.rglob('*')):
@@ -247,5 +250,50 @@ print(xc.to_string()); print('report table attendances:', int(a.attendances))
 assert xc['All Attendances by Age and Gender'] == a.attendances"""),
     ("code", """claims.to_parquet(c.GOLD / 'dna_claims_rebuilt.parquet', index=False)
 rates.reset_index().to_parquet(c.GOLD / 'dna_rate_by_denominator.parquet', index=False)"""),
+])
+
+# ---------------------------------------------------------------- 06
+build("06_provisional_vs_final.ipynb", [
+    ("md", """# 06 First-published against final monthly sitrep
+The footnote implies the report tables absorb revisions while CQI does not. The direct test is to compare each month's first-published sitrep with its final revised version, and then ask which of the two CQI agrees with.
+
+I can only test months whose original file I could retrieve from the Internet Archive: April, May, June, October, November and December 2025. July to September and March 2026 originals were not captured, the January 2026 download failed, and February was never revised. I say so rather than fill the gaps."""),
+    ("code", HEAD),
+    ("code", """final, _ = c.read_msitae_monthly('msitae_monthly')
+prov, prov_tot = c.read_msitae_monthly('msitae_provisional')
+cqi = c.read_cqi()
+src = pd.read_csv(c.BRONZE / 'msitae_provisional' / 'archive_sources.tsv', sep='\\t', header=None, names=['file', 'archive_timestamp', 'url'])
+for d in (final, prov):
+    d['att'] = d[c.ATT_COLS + c.BOOKED_COLS].sum(axis=1)
+    d['over4'] = d[c.OVER4_COLS + c.OVER4_BOOKED_COLS].sum(axis=1)
+# The provisional December file writes its total row as 'TOTAL ' with a trailing space; read_msitae_monthly strips it, so I check.
+print('provisional provider rows sum to their own TOTAL row:', int((prov.groupby('month')[c.ATT_COLS + c.BOOKED_COLS].sum() - prov_tot.set_index('month')[c.ATT_COLS + c.BOOKED_COLS]).abs().max().max()) == 0)
+src[['file', 'archive_timestamp']]"""),
+    ("code", """cq = cqi[(cqi.measure_id == 'AEQI012') & (cqi.org_code != 'ENG')].set_index(['month', 'org_code']).measure_value
+rows, changed = [], []
+for mth in sorted(prov.month.unique()):
+    p = prov[prov.month == mth].set_index('org_code'); f = final[final.month == mth].set_index('org_code')
+    j = p[['org_name', 'att', 'over4']].join(f[['att', 'over4']], lsuffix='_prov', rsuffix='_final', how='outer').fillna({'att_prov': 0, 'att_final': 0, 'over4_prov': 0, 'over4_final': 0})
+    j['cqi'] = [cq.get((mth, o)) for o in j.index]
+    j['revision'] = j.att_final - j.att_prov
+    sh = j[j.cqi.notna()]
+    rows.append({'month': mth, 'provisional_total': j.att_prov.sum(), 'final_total': j.att_final.sum(), 'revision': j.revision.sum(),
+                 'revision_pct': 100 * j.revision.sum() / j.att_prov.sum(), 'providers_revised': int((j.revision != 0).sum()),
+                 'four_hour_prov': 100 * (1 - j.over4_prov.sum() / j.att_prov.sum()), 'four_hour_final': 100 * (1 - j.over4_final.sum() / j.att_final.sum()),
+                 'cqi_providers': len(sh), 'cqi_equals_final': int((sh.cqi == sh.att_final).sum()), 'cqi_equals_prov': int((sh.cqi == sh.att_prov).sum()),
+                 'revised_providers_where_cqi_equals_final': int(((sh.revision != 0) & (sh.cqi == sh.att_final)).sum()),
+                 'revised_providers_in_cqi': int((sh.revision != 0).sum())})
+    changed.append(j[j.revision != 0].assign(month=mth).reset_index())
+res = pd.DataFrame(rows); res['four_hour_change_pp'] = res.four_hour_final - res.four_hour_prov
+res.round(3).T"""),
+    ("code", """revised = pd.concat(changed, ignore_index=True)[['month', 'org_code', 'org_name', 'att_prov', 'att_final', 'revision', 'cqi']]
+print('revised provider-months:', len(revised), '| total revision across the six months:', int(revised.revision.sum()))
+revised"""),
+    ("code", """# The sharp test: for a provider whose attendances were revised AND that CQI includes, does CQI carry the old or the new number?
+inc = revised[revised.cqi.notna()]
+print('revised providers that CQI includes:', len(inc), '| CQI equals FINAL:', int((inc.cqi == inc.att_final).sum()), '| CQI equals PROVISIONAL:', int((inc.cqi == inc.att_prov).sum()))
+print('all CQI provider-months in these six months: equals final', int(res.cqi_equals_final.sum()), 'of', int(res.cqi_providers.sum()), '| equals provisional', int(res.cqi_equals_prov.sum()))"""),
+    ("code", """res.to_parquet(c.GOLD / 'provisional_vs_final_monthly.parquet', index=False)
+revised.to_parquet(c.GOLD / 'provisional_vs_final_revised_providers.parquet', index=False)"""),
 ])
 print('built')
