@@ -1,0 +1,83 @@
+section,claim,stated,rebuilt,source,agrees
+A&E headline,attendances in 2025-26,27976025,27976025,Table 1,True
+A&E headline,change on 2024-25 (%),2.2,2.223165511273595,Table 1,True
+A&E headline,change on 2011-12 (%),30.2,30.233701692282477,Table 1,True
+A&E headline,four-hour performance 2025-26 (%),74.9,74.92876132331165,Table 3,True
+A&E headline,four-hour performance 2024-25 (%),73.9,73.87527396448897,Table 3,True
+A&E headline,four-hour performance 2013-14 (%),95.7,95.68758532723115,Table 3,True
+A&E headline,last year at or above 95%,2013-14,2013-14,Table 3,True
+A&E headline,"attendances over four hours, report table",7013936,7013936,Table 3,True
+A&E headline,"attendances over four hours, rebuilt from monthly files",7013936,7013936,monthly sitreps,True
+A&E headline,"over four hours per day, to the nearest thousand",19000,19216.26301369863,my arithmetic; 2025-26 has 365 days,True
+Gate,first attempt: attendances short by,-1006432,-1006432.0,gate_residuals,True
+Gate,first attempt: attendances short by (%),-3.6,-3.5974803425433026,gate_residuals,True
+Gate,first attempt: four-hour adrift (pp),-0.56,-0.5627373347405182,gate_residuals,True
+Gate,Type 1 providers matched exactly with booked in,121,121,gate_provider_residuals,True
+Coverage gap,CQI attendances,27139660,27139660.0,"CQI AEQI012, ENG rows",True
+Coverage gap,attendances CQI does not cover,836365,836365.0,monthly sitreps less CQI,True
+Coverage gap,share not covered (%),3.0,2.989577683033955,monthly sitreps less CQI,True
+Coverage gap,provider-months in CQI that match the final sitrep exactly,1838,1838,monthly sitreps against CQI,True
+Coverage gap,provider-months in CQI,1838,1838,monthly sitreps against CQI,True
+Coverage gap,providers with activity that CQI omits,41,41,omitted_providers,True
+Coverage gap,attendances at those providers,836365,836365,omitted_providers,True
+Coverage gap,largest omitted provider,63151,63151,omitted_providers,True
+Coverage gap,second largest,62759,62759,omitted_providers,True
+Coverage gap,third largest,49604,49604,omitted_providers,True
+Coverage gap,four-hour performance across the 41 (%),97.9,97.87174260041968,omitted_providers,True
+Coverage gap,omitted providers with ANY row in CQI,0,0,"CQI, all measures",True
+Coverage gap,organisations in CQI,185,185,CQI,True
+Coverage gap,organisations in CQI with ECDS attendances,185,185,CQI AEQI011,True
+Coverage gap,providers in CQI with report-table attendances,154,154,CQI AEQI012,True
+Four-hour effect,"four-hour performance, all providers (%)",74.9,74.92876132331165,monthly sitreps,True
+Four-hour effect,"four-hour performance, CQI providers only (%)",74.2,74.2217256959004,"monthly sitreps, CQI provider set",True
+Four-hour effect,smallest monthly gap (pp),0.6,0.5980739469014225,"monthly sitreps, CQI provider set",True
+Four-hour effect,largest monthly gap (pp),0.8,0.7619164117516135,"monthly sitreps, CQI provider set",True
+ECDS coverage,ECDS as a share of MSitAE in CQI (%),98.1,98.12685936375031,CQI AEQI011 / AEQI012,True
+ECDS coverage,ECDS as a share of MSitAE in Table 11 (%),95.2,95.22191948284289,Table 11,True
+ECDS coverage,"ECDS counts, CQI against Table 11, difference (%)",0.03,0.030084904617484632,CQI and Table 11,True
+ECDS coverage,"ECDS counts, CQI against IMD total, difference (%)",0.03,0.031121279264816854,CQI and ECDS National Report Tables,True
+Code-prefix test,"attendances explained by a code-prefix match, at most",207626,207626,"omitted_providers, CQI",True
+Revisions,months with a first-published file,6,6,provisional_vs_final,True
+Revisions,smallest revision to a month (%),-0.04,-0.0376447938668208,provisional_vs_final,True
+Revisions,largest revision to a month (%),0.15,0.14868409363803076,provisional_vs_final,True
+Revisions,fewest providers revised in a month,1,1,provisional_vs_final,True
+Revisions,most providers revised in a month,3,3,provisional_vs_final,True
+Revisions,largest effect on four-hour performance (pp),0.04,0.03838200510054435,provisional_vs_final,True
+Revisions,revised providers that CQI includes,9,9,provisional_vs_final,True
+Revisions,"of those, CQI carries the final value",9,9,provisional_vs_final,True
+Outpatients,appointments in 2025-26,150317821,150317821.0,Summary Report 1,True
+Outpatients,"appointments, change on 2024-25 (%)",2.9,2.921466674070472,Summary Report 1,True
+Outpatients,"appointments, change on 2019-20 (%)",20.3,20.323773137987832,Summary Report 1,True
+Outpatients,missed appointments in 2025-26,8151086,8151086.0,Summary Report 1,True
+Outpatients,"missed appointments, rise on 2024-25",6975,6975.0,Summary Report 1,True
+Outpatients,"missed appointments, change on 2024-25 (%)",0.1,0.08564470695451298,Summary Report 1,True
+Outpatients,"missed appointments, change on 2019-20 (%)",5.9,5.926492909718473,Summary Report 1,True
+Outpatients,did-not-attend rate 2025-26 (%),5.4,5.422567960188832,Summary Report 1,True
+Outpatients,did-not-attend rate 2019-20 (%),6.2,6.159590666550056,Summary Report 1,True
+Outpatients,missed appointments at the 2019-20 rate (millions),9.26,9.25896247247742,Summary Report 1,True
+Outpatients,shortfall against that (millions),1.1,1.1078764724774193,Summary Report 1,True
+Outpatients,year with the lowest rate of the eleven,2025-26,2025-26,Summary Report 1,True
+Outpatients,years in the series,11,11,Summary Report 1,True
+Deprivation (ECDS),"most deprived decile, attendances per 10,000, to the nearest hundred",6200,6228.42229900493,ECDS National Report Tables,True
+Deprivation (ECDS),"least deprived decile, attendances per 10,000, to the nearest hundred",3400,3366.7223413485794,ECDS National Report Tables,True
+Deprivation (ECDS),ratio 2025/26,1.85,1.8500014851338105,ECDS National Report Tables,True
+Deprivation (ECDS),ratio 2024/25,1.89,1.8935381031205936,ECDS National Report Tables,True
+Deprivation (ECDS),part of the fall due to new populations (one direction),0.02,0.018551657220718942,population sensitivity,True
+Deprivation (ECDS),part of the fall due to new populations (other direction),0.02,0.018304228590671823,population sensitivity,True
+Deprivation (ECDS),ECDS attendances behind the ratio (millions),26.6,26.639584,ECDS National Report Tables,True
+Deprivation (ECDS),share with no deprivation score (%),2.6,2.6135017724000495,ECDS National Report Tables,True
+Coverage checks,omitted providers reporting in all twelve months,30,30,omitted_months_active,True
+Coverage checks,omitted providers reporting in fewer than twelve months,11,11,omitted_months_active,True
+Coverage checks,omitted attendances in the Type 1 and Type 2 columns,0,0,monthly sitreps,True
+Coverage checks,omitted attendances in the Other A&E columns,836365,836365,monthly sitreps,True
+Coverage checks,included providers with Other A&E as their largest category,41,41,provider_main_type_by_coverage,True
+Coverage checks,included providers classified,154,154,provider_main_type_by_coverage,True
+Coverage checks,omitted providers with zero breaches in every month they report,16,16,monthly sitreps,True
+Coverage checks,attendances at those sixteen,272430,272430,monthly sitreps,True
+Coverage checks,included providers with zero breaches across the year,3,3,monthly sitreps,True
+Coverage checks,gap as published (pp),0.71,0.7070356274112441,zero_breach_sensitivity,True
+Coverage checks,gap if the zero-breach sites were 99% (pp),0.7,0.6972976464078897,zero_breach_sensitivity,True
+Coverage checks,gap if the zero-breach sites were 95% (pp),0.66,0.6583457223943725,zero_breach_sensitivity,True
+Coverage checks,gap if the zero-breach sites were 90% (pp),0.61,0.6096558173774866,zero_breach_sensitivity,True
+Coverage checks,CQI measures that give a share of attendances within four hours,0,0,CQI measure names,True
+Coverage checks,CQI publishes a median and a 95th percentile of total time,True,True,CQI measure names,True

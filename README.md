@@ -25,6 +25,8 @@ I started from the footnote in NHS England Digital's *Hospital Accident & Emerge
 5. `05_dna_rebuild` rebuilds the outpatient DNA claims.
 6. `06_provisional_vs_final` compares first-published monthly files (from the Internet Archive) with the final ones, and with CQI.
 7. `07_deprivation_ratio` rebuilds the release's 1.85x deprivation ratio from the ECDS National Report Tables.
+8. `08_coverage_checks` looks at how many months each omitted provider reports in, which department type they report under, and whether the 100% within four hours sites change the 0.7 point finding.
+9. `09_claims_ledger` tests every figure in the article against the tables, and lists the claims no notebook rebuilds.
 
 Shared parsers are in `src/common.py`; `src/build_notebooks.py` regenerates the notebooks.
 

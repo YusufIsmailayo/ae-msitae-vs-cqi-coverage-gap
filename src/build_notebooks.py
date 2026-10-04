@@ -1,12 +1,17 @@
-"""Generates the five notebooks. Run once; the notebooks themselves are the deliverable."""
+"""Generates the notebooks. Run once; the notebooks themselves are the deliverable."""
+import sys
 import nbformat as nbf
 from pathlib import Path
+
+ONLY = sys.argv[1:]   # e.g. "08" rebuilds only notebook 08; no argument rebuilds all
 
 NB = Path(__file__).resolve().parents[1] / "notebooks"
 HEAD = "import sys\nsys.path.insert(0, '../src')\nimport pandas as pd\nimport numpy as np\nimport common as c\npd.options.display.float_format = '{:,.4f}'.format\npd.options.display.width = 200\n"
 
 
 def build(name, cells):
+    if ONLY and name[:2] not in ONLY:
+        return
     nb = nbf.v4.new_notebook()
     nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3", "language": "python"}
     nb.cells = [nbf.v4.new_markdown_cell(t) if k == "md" else nbf.v4.new_code_cell(t) for k, t in cells]
@@ -348,4 +353,303 @@ assert b.most_population == op_pop['Most deprived 10%'] and b.least_population =
     ("code", """ratio.to_parquet(c.GOLD / 'deprivation_ratio_by_year.parquet', index=False)
 sens.rename('ratio').reset_index().rename(columns={'index': 'scenario'}).to_parquet(c.GOLD / 'deprivation_ratio_population_sensitivity.parquet', index=False)"""),
 ])
+# ---------------------------------------------------------------- 08
+build("09_claims_ledger.ipynb", [
+    ("md", "# 09 Claims ledger\nEvery number in the article draft gets one row here: what I wrote, what I rebuilt, and where I rebuilt it. I wrote this last because I want the ledger to test the draft, not the other way round. Where my rebuilt figure does not round to the figure I wrote, the row says so and I fix the draft, not the ledger.\n\nTwo things this notebook does not do. It does not repeat the reconciliation gate (notebook 03). And it lists, at the bottom, the claims I have not rebuilt, so that I cannot mistake a quoted sentence for a verified one."),
+    ("code", HEAD),
+    ("code", """m = pd.read_parquet(c.SILVER / 'msitae_monthly_provider.parquet')
+t1 = pd.read_parquet(c.SILVER / 'msitae_table1_attendances.parquet').set_index('year')
+t3 = pd.read_parquet(c.SILVER / 'msitae_table3_four_hour.parquet').set_index('year')
+t11 = pd.read_parquet(c.SILVER / 'msitae_table11_dept_type.parquet').set_index('dept_type')
+op = pd.read_parquet(c.SILVER / 'op_summary1_appointments.parquet').set_index('year')
+imd = pd.read_parquet(c.SILVER / 'ecds_imd_decile.parquet')
+cqi = pd.read_parquet(c.SILVER / 'cqi_long.parquet')
+omitted = pd.read_parquet(c.GOLD / 'omitted_providers.parquet')
+gate = pd.read_parquet(c.GOLD / 'gate_residuals.parquet')
+gate_prov = pd.read_parquet(c.GOLD / 'gate_provider_residuals.parquet')
+rev_m = pd.read_parquet(c.GOLD / 'provisional_vs_final_monthly.parquet')
+rev_p = pd.read_parquet(c.GOLD / 'provisional_vs_final_revised_providers.parquet')
+dep = pd.read_parquet(c.GOLD / 'deprivation_ratio_by_year.parquet').set_index('year')
+sens = pd.read_parquet(c.GOLD / 'deprivation_ratio_population_sensitivity.parquet').set_index('scenario').ratio
+
+# Booked attendances are included, as the gate in notebook 03 showed they must be.
+m['att'] = m[c.ATT_COLS].sum(axis=1) + m[c.BOOKED_COLS].sum(axis=1)
+m['over4'] = m[c.OVER4_COLS].sum(axis=1) + m[c.OVER4_BOOKED_COLS].sum(axis=1)
+
+rows = []
+def claim(section, text, stated, rebuilt, dp=None, source=''):
+    # dp is the number of decimals I wrote the figure to. None means the claim is exact (a count, a year or a yes/no).
+    rows.append({'section': section, 'claim': text, 'stated': stated, 'rebuilt': rebuilt, 'dp': dp, 'source': source})"""),
+    ("md", "## 1. The headline numbers\nThese come from the report tables and, where I can, from my own monthly rebuild."),
+    ("code", """y, py, y0 = '2025-26', '2024-25', '2011-12'
+att = t1.attendances
+S = 'A&E headline'
+claim(S, 'attendances in 2025-26', 27976025, att[y], None, 'Table 1')
+claim(S, 'change on 2024-25 (%)', 2.2, 100 * (att[y] / att[py] - 1), 1, 'Table 1')
+claim(S, 'change on 2011-12 (%)', 30.2, 100 * (att[y] / att[y0] - 1), 1, 'Table 1')
+claim(S, 'four-hour performance 2025-26 (%)', 74.9, 100 * t3.loc[y, 'pct_le4'], 1, 'Table 3')
+claim(S, 'four-hour performance 2024-25 (%)', 73.9, 100 * t3.loc[py, 'pct_le4'], 1, 'Table 3')
+claim(S, 'four-hour performance 2013-14 (%)', 95.7, 100 * t3.loc['2013-14', 'pct_le4'], 1, 'Table 3')
+claim(S, 'last year at or above 95%', '2013-14', t3.index[t3.pct_le4 >= 0.95].max(), None, 'Table 3')
+claim(S, 'attendances over four hours, report table', 7013936, t3.loc[y, 'gt4'], None, 'Table 3')
+claim(S, 'attendances over four hours, rebuilt from monthly files', 7013936, int(m.over4.sum()), None, 'monthly sitreps')
+claim(S, 'over four hours per day, to the nearest thousand', 19000, t3.loc[y, 'gt4'] / 365, -3, 'my arithmetic; 2025-26 has 365 days')"""),
+    ("md", "## 2. The gate, as I describe it in the article"),
+    ("code", """S = 'Gate'
+first = gate[(gate.definition == 'non-booked only') & (gate.metric == 'attendances, all types')].iloc[0]
+first4 = gate[(gate.definition == 'non-booked only') & (gate.metric == 'four-hour %')].iloc[0]
+claim(S, 'first attempt: attendances short by', -1006432, first.residual, None, 'gate_residuals')
+claim(S, 'first attempt: attendances short by (%)', -3.6, first.residual_pct, 1, 'gate_residuals')
+claim(S, 'first attempt: four-hour adrift (pp)', -0.56, first4.residual, 2, 'gate_residuals')
+claim(S, 'Type 1 providers matched exactly with booked in', 121, int(gate_prov.loc[gate_prov.definition == 'non-booked + booked', 'exact_matches'].iloc[0]), None, 'gate_provider_residuals')"""),
+    ("md", "## 3. The coverage gap\nI rebuild the CQI side from the Silver table and the sitrep side from my own monthly sum, exactly as in notebook 04."),
+    ("code", """S = 'Coverage gap'
+a12 = cqi[(cqi.measure_id == 'AEQI012') & (cqi.org_code != 'ENG')]
+cq = a12[a12.measure_value > 0].rename(columns={'measure_value': 'cqi_att'})[['month', 'org_code', 'cqi_att']]
+cqi_total = cqi[(cqi.measure_id == 'AEQI012') & (cqi.org_code == 'ENG')].measure_value.sum()
+j = m[['month', 'org_code', 'att', 'over4']].merge(cq, on=['month', 'org_code'], how='left')
+shared = j[j.cqi_att.notna()]
+claim(S, 'CQI attendances', 27139660, cqi_total, None, 'CQI AEQI012, ENG rows')
+claim(S, 'attendances CQI does not cover', 836365, m.att.sum() - cqi_total, None, 'monthly sitreps less CQI')
+claim(S, 'share not covered (%)', 3.0, 100 * (m.att.sum() - cqi_total) / m.att.sum(), 1, 'monthly sitreps less CQI')
+claim(S, 'provider-months in CQI that match the final sitrep exactly', 1838, int((shared.att == shared.cqi_att).sum()), None, 'monthly sitreps against CQI')
+claim(S, 'provider-months in CQI', 1838, len(shared), None, 'monthly sitreps against CQI')
+claim(S, 'providers with activity that CQI omits', 41, len(omitted), None, 'omitted_providers')
+claim(S, 'attendances at those providers', 836365, omitted.att.sum(), None, 'omitted_providers')
+top = omitted.sort_values('att', ascending=False).att.tolist()[:3]
+claim(S, 'largest omitted provider', 63151, top[0], None, 'omitted_providers')
+claim(S, 'second largest', 62759, top[1], None, 'omitted_providers')
+claim(S, 'third largest', 49604, top[2], None, 'omitted_providers')
+claim(S, 'four-hour performance across the 41 (%)', 97.9, 100 * (1 - omitted.over4.sum() / omitted.att.sum()), 1, 'omitted_providers')
+# The article says the 41 have no row at all, not even a zero. I test that directly against every CQI measure.
+claim(S, 'omitted providers with ANY row in CQI', 0, cqi[cqi.org_code.isin(omitted.org_code)].org_code.nunique(), None, 'CQI, all measures')
+w = cqi[cqi.org_code != 'ENG'].pivot_table(index='org_code', columns='measure_id', values='measure_value', aggfunc='sum')[['AEQI011', 'AEQI012']].fillna(0)
+claim(S, 'organisations in CQI', 185, len(w), None, 'CQI')
+claim(S, 'organisations in CQI with ECDS attendances', 185, int((w.AEQI011 > 0).sum()), None, 'CQI AEQI011')
+claim(S, 'providers in CQI with report-table attendances', 154, int((w.AEQI012 > 0).sum()), None, 'CQI AEQI012')
+print('zero-valued AEQI012 rows for organisations that ARE in CQI:', int((a12.measure_value == 0).sum()), '(these are the contrast with the 41, who have no row)')"""),
+    ("code", """S = 'Four-hour effect'
+inc = set(cq.org_code)
+def perf(d): return 100 * (1 - d.over4.sum() / d.att.sum())
+m['in_cqi'] = m.org_code.isin(inc)
+by_month = pd.DataFrame({'all': m.groupby('month').apply(perf, include_groups=False), 'cqi': m[m.in_cqi].groupby('month').apply(perf, include_groups=False)})
+gap_pp = (by_month['all'] - by_month['cqi'])
+claim(S, 'four-hour performance, all providers (%)', 74.9, perf(m), 1, 'monthly sitreps')
+claim(S, 'four-hour performance, CQI providers only (%)', 74.2, perf(m[m.in_cqi]), 1, 'monthly sitreps, CQI provider set')
+claim(S, 'smallest monthly gap (pp)', 0.6, gap_pp.min(), 1, 'monthly sitreps, CQI provider set')
+claim(S, 'largest monthly gap (pp)', 0.8, gap_pp.max(), 1, 'monthly sitreps, CQI provider set')
+
+S = 'ECDS coverage'
+ecds_cqi = cqi[(cqi.measure_id == 'AEQI011') & (cqi.org_code == 'ENG')].measure_value.sum()
+ecds_t11 = t11.ecds.iloc[3]
+ecds_imd = imd[(imd.period == '2025/26') & (imd.group == 'IMD_DECILE_TOTAL')].attendances.iloc[0]
+claim(S, 'ECDS as a share of MSitAE in CQI (%)', 98.1, 100 * ecds_cqi / cqi_total, 1, 'CQI AEQI011 / AEQI012')
+claim(S, 'ECDS as a share of MSitAE in Table 11 (%)', 95.2, 100 * t11.ecds.iloc[3] / t11.msitae.iloc[3], 1, 'Table 11')
+claim(S, 'ECDS counts, CQI against Table 11, difference (%)', 0.03, 100 * (ecds_t11 - ecds_cqi) / ecds_cqi, 2, 'CQI and Table 11')
+claim(S, 'ECDS counts, CQI against IMD total, difference (%)', 0.03, 100 * (ecds_imd - ecds_cqi) / ecds_cqi, 2, 'CQI and ECDS National Report Tables')
+
+S = 'Code-prefix test'
+orphans = w[(w.AEQI012 == 0) & (w.AEQI011 > 0)]
+def parent(code):
+    for n in (5, 4, 3):
+        if code[:n] != code and code[:n] in orphans.index:
+            return code[:n]
+hit = omitted[omitted.org_code.map(parent).notna()]
+claim(S, 'attendances explained by a code-prefix match, at most', 207626, hit.att.sum(), None, 'omitted_providers, CQI')"""),
+    ("md", "## 4. Revisions\nThe six months I could test, from the output of notebook 06."),
+    ("code", """S = 'Revisions'
+ins = rev_p[rev_p.cqi.notna()]
+claim(S, 'months with a first-published file', 6, len(rev_m), None, 'provisional_vs_final')
+claim(S, 'smallest revision to a month (%)', -0.04, rev_m.revision_pct.min(), 2, 'provisional_vs_final')
+claim(S, 'largest revision to a month (%)', 0.15, rev_m.revision_pct.max(), 2, 'provisional_vs_final')
+claim(S, 'fewest providers revised in a month', 1, int(rev_m.providers_revised.min()), None, 'provisional_vs_final')
+claim(S, 'most providers revised in a month', 3, int(rev_m.providers_revised.max()), None, 'provisional_vs_final')
+claim(S, 'largest effect on four-hour performance (pp)', 0.04, rev_m.four_hour_change_pp.abs().max(), 2, 'provisional_vs_final')
+claim(S, 'revised providers that CQI includes', 9, len(ins), None, 'provisional_vs_final')
+claim(S, 'of those, CQI carries the final value', 9, int((ins.cqi == ins.att_final).sum()), None, 'provisional_vs_final')"""),
+    ("md", "## 5. Outpatients"),
+    ("code", """S = 'Outpatients'
+a, b, o = op.loc[y], op.loc[py], op.loc['2019-20']
+pc = lambda x, z: 100 * (x / z - 1)
+rate = 100 * op.dnas / op.total
+claim(S, 'appointments in 2025-26', 150317821, a.total, None, 'Summary Report 1')
+claim(S, 'appointments, change on 2024-25 (%)', 2.9, pc(a.total, b.total), 1, 'Summary Report 1')
+claim(S, 'appointments, change on 2019-20 (%)', 20.3, pc(a.total, o.total), 1, 'Summary Report 1')
+claim(S, 'missed appointments in 2025-26', 8151086, a.dnas, None, 'Summary Report 1')
+claim(S, 'missed appointments, rise on 2024-25', 6975, a.dnas - b.dnas, None, 'Summary Report 1')
+claim(S, 'missed appointments, change on 2024-25 (%)', 0.1, pc(a.dnas, b.dnas), 1, 'Summary Report 1')
+claim(S, 'missed appointments, change on 2019-20 (%)', 5.9, pc(a.dnas, o.dnas), 1, 'Summary Report 1')
+claim(S, 'did-not-attend rate 2025-26 (%)', 5.4, rate[y], 1, 'Summary Report 1')
+claim(S, 'did-not-attend rate 2019-20 (%)', 6.2, rate['2019-20'], 1, 'Summary Report 1')
+claim(S, 'missed appointments at the 2019-20 rate (millions)', 9.26, o.dnas / o.total * a.total / 1e6, 2, 'Summary Report 1')
+claim(S, 'shortfall against that (millions)', 1.1, (o.dnas / o.total * a.total - a.dnas) / 1e6, 1, 'Summary Report 1')
+claim(S, 'year with the lowest rate of the eleven', '2025-26', rate.idxmin(), None, 'Summary Report 1')
+claim(S, 'years in the series', 11, len(op), None, 'Summary Report 1')"""),
+    ("md", "## 6. Deprivation\nThis is an ECDS figure, not a report-table one. I keep it in its own section so the two are never read as one source."),
+    ("code", """S = 'Deprivation (ECDS)'
+d = dep.loc['2025/26']
+cur = imd[imd.period == '2025/26'].set_index('group')
+claim(S, 'most deprived decile, attendances per 10,000, to the nearest hundred', 6200, 1e4 * d.most_attendances / d.most_population, -2, 'ECDS National Report Tables')
+claim(S, 'least deprived decile, attendances per 10,000, to the nearest hundred', 3400, 1e4 * d.least_attendances / d.least_population, -2, 'ECDS National Report Tables')
+claim(S, 'ratio 2025/26', 1.85, d.ratio_published_rates, 2, 'ECDS National Report Tables')
+claim(S, 'ratio 2024/25', 1.89, dep.loc['2024/25', 'ratio_published_rates'], 2, 'ECDS National Report Tables')
+claim(S, 'part of the fall due to new populations (one direction)', 0.02, sens['2024/25 counts, 2024/25 populations'] - sens['2024/25 counts, 2025/26 populations'], 2, 'population sensitivity')
+claim(S, 'part of the fall due to new populations (other direction)', 0.02, sens['2025/26 counts, 2024/25 populations'] - sens['2025/26 counts, 2025/26 populations'], 2, 'population sensitivity')
+claim(S, 'ECDS attendances behind the ratio (millions)', 26.6, cur.loc['IMD_DECILE_TOTAL', 'attendances'] / 1e6, 1, 'ECDS National Report Tables')
+claim(S, 'share with no deprivation score (%)', 2.6, 100 * cur.loc['Unknown', 'attendances'] / cur.loc['IMD_DECILE_TOTAL', 'attendances'], 1, 'ECDS National Report Tables')"""),
+    ("md", "## 7. The coverage checks\nThese are the figures I added after notebook 08. I rebuild what I can from the Silver tables and read the rest from the Gold tables that notebook 08 wrote."),
+    ("code", """S = 'Coverage checks'
+ma = pd.read_parquet(c.GOLD / 'omitted_months_active.parquet')
+bt = pd.read_parquet(c.GOLD / 'provider_main_type_by_coverage.parquet'); bt = bt.set_index(bt.columns[0])
+sg = pd.read_parquet(c.GOLD / 'zero_breach_sensitivity.parquet').set_index('assumed_rate_for_zero_breach_sites').gap_pp.abs()
+claim(S, 'omitted providers reporting in all twelve months', 30, int((ma.months_active == 12).sum()), None, 'omitted_months_active')
+claim(S, 'omitted providers reporting in fewer than twelve months', 11, int((ma.months_active < 12).sum()), None, 'omitted_months_active')
+g = m[m.org_code.isin(set(omitted.org_code))]
+claim(S, 'omitted attendances in the Type 1 and Type 2 columns', 0, int(g[['att_t1', 'bkd_t1', 'att_t2', 'bkd_t2']].sum().sum()), None, 'monthly sitreps')
+claim(S, 'omitted attendances in the Other A&E columns', 836365, int(g[['att_other', 'bkd_other']].sum().sum()), None, 'monthly sitreps')
+claim(S, 'included providers with Other A&E as their largest category', 41, int(bt.loc['in CQI', 'Other A&E']), None, 'provider_main_type_by_coverage')
+claim(S, 'included providers classified', 154, int(bt.loc['in CQI'].sum()), None, 'provider_main_type_by_coverage')
+act = m[(m.att > 0) & m.org_code.isin(set(omitted.org_code))]
+zero_all = act.groupby('org_code').over4.apply(lambda x: bool((x == 0).all()))
+yr_o = act.groupby('org_code').agg(att=('att', 'sum'), over4=('over4', 'sum'))
+yr_i = m[(m.att > 0) & m.org_code.isin(set(cq.org_code))].groupby('org_code').agg(att=('att', 'sum'), over4=('over4', 'sum'))
+claim(S, 'omitted providers with zero breaches in every month they report', 16, int(zero_all.sum()), None, 'monthly sitreps')
+claim(S, 'attendances at those sixteen', 272430, int(yr_o[yr_o.over4 == 0].att.sum()), None, 'monthly sitreps')
+claim(S, 'included providers with zero breaches across the year', 3, int((yr_i.over4 == 0).sum()), None, 'monthly sitreps')
+claim(S, 'gap as published (pp)', 0.71, sg['as published'], 2, 'zero_breach_sensitivity')
+claim(S, 'gap if the zero-breach sites were 99% (pp)', 0.70, sg['99'], 2, 'zero_breach_sensitivity')
+claim(S, 'gap if the zero-breach sites were 95% (pp)', 0.66, sg['95'], 2, 'zero_breach_sensitivity')
+claim(S, 'gap if the zero-breach sites were 90% (pp)', 0.61, sg['90'], 2, 'zero_breach_sensitivity')
+names = set(cqi.measure_name.dropna().unique())
+claim(S, 'CQI measures that give a share of attendances within four hours', 0, sum(any(k in n for k in ['FOUR', '4_HOUR', '4H', 'WITHIN']) for n in names), None, 'CQI measure names')
+claim(S, 'CQI publishes a median and a 95th percentile of total time', True, {'TOTAL_TIME_MEDIAN', 'TOTAL_TIME_95'} <= names, None, 'CQI measure names')"""),
+    ("md", "## The ledger\nI write the whole table out first, then decide. A row that disagrees is shown on its own before the assertion runs."),
+    ("code", """ledger = pd.DataFrame(rows)
+def agrees(r):
+    if pd.isna(r.dp):
+        return bool(r.stated == r.rebuilt)
+    return bool(round(float(r.rebuilt), int(r.dp)) == float(r.stated))
+ledger['agrees'] = ledger.apply(agrees, axis=1)
+print(len(ledger), 'claims;', int(ledger.agrees.sum()), 'agree;', int((~ledger.agrees).sum()), 'do not')
+ledger[~ledger.agrees][['section', 'claim', 'stated', 'rebuilt', 'source']]"""),
+    ("code", """ledger.assign(stated=ledger.stated.astype(str), rebuilt=ledger.rebuilt.astype(str)).to_parquet(c.GOLD / 'claims_ledger.parquet', index=False)
+ledger.assign(stated=ledger.stated.astype(str), rebuilt=ledger.rebuilt.astype(str)).drop(columns='dp').to_csv(c.GOLD / 'claims_ledger.csv', index=False)
+assert ledger.agrees.all(), 'At least one number in the draft does not match what I rebuilt: I fix the draft before publishing.'
+print('Every ledger row agrees at the precision I wrote it to.')"""),
+    ("md", "## Claims I have not rebuilt\nThese are in the draft but no notebook here computes them. I list them so that I check each one against its source, or soften the sentence, before I publish."),
+    ("code", """not_rebuilt = pd.DataFrame([
+    ('The release was published on 24 September 2026', 'release page', 'date'),
+    ('The MSitAE report tables \"account for revisions to historic data\" (the footnote quote)', 'release page; the text is not in any Bronze workbook', 'quotation'),
+    ('The report tables say planned attendances are excluded', 'MSitAE report table notes', 'quotation'),
+    ('The release draws on the monthly situation reports and the patient-level Emergency Care Data Set', 'release page', 'description of a file'),
+    ('The release describes its sources as covering attendances in NHS hospitals, minor injury units and walk-in centres', 'release page', 'quotation'),
+    ('Other A&E is the category that holds walk-in and minor injury services', 'situation-report column names', 'description of a category'),
+], columns=['claim', 'where to check', 'kind'])
+not_rebuilt"""),
+])
+
+# ---------------------------------------------------------------- 09
+build("08_coverage_checks.ipynb", [
+    ("md", "# 08 Two checks on the 41 omitted providers\nWhen I reviewed the draft I wanted two things settled before I send NHS England a question or publish a sentence about these providers.\n\n1. Is the omission a steady feature of the year, or are some of the 41 providers appearing and disappearing? In particular, was NL7 (Assura Vertis), the one provider added when October was revised, a late arrival or a regular reporter?\n2. Several of the 41 show exactly 100% within four hours. How much does that matter to the 0.7 point finding, and is it unique to the omitted providers?\n\nI also classify each provider by the department type it mainly reports under, so that I describe the 41 from a field in the data and not from their names."),
+    ("code", HEAD),
+    ("code", """m = pd.read_parquet(c.SILVER / 'msitae_monthly_provider.parquet')
+cqi = pd.read_parquet(c.SILVER / 'cqi_long.parquet')
+omitted = pd.read_parquet(c.GOLD / 'omitted_providers.parquet')
+# Booked attendances are included, as the gate in notebook 03 showed they must be.
+m['att'] = m[c.ATT_COLS].sum(axis=1) + m[c.BOOKED_COLS].sum(axis=1)
+m['over4'] = m[c.OVER4_COLS].sum(axis=1) + m[c.OVER4_BOOKED_COLS].sum(axis=1)
+codes = set(omitted.org_code)
+a12 = cqi[(cqi.measure_id == 'AEQI012') & (cqi.org_code != 'ENG')]
+inc = set(a12[a12.measure_value > 0].org_code)
+print(len(codes), 'omitted providers;', len(inc), 'providers in CQI with report-table attendances')"""),
+    ("md", "## 1. How many months does each omitted provider report in?"),
+    ("code", """active = m[m.att > 0]
+months_active = active[active.org_code.isin(codes)].groupby('org_code').agg(org_name=('org_name', 'first'), months_active=('month', 'nunique'), first_month=('month', 'min'), last_month=('month', 'max'), attendances=('att', 'sum'))
+dist = months_active.months_active.value_counts().sort_index().rename_axis('months with activity').rename('providers').reset_index()
+all_months = sorted(m.month.unique())
+months_active['continuous_run'] = [(all_months.index(l) - all_months.index(f) + 1) == n for f, l, n in zip(months_active.first_month, months_active.last_month, months_active.months_active)]
+part = months_active[months_active.months_active < 12]
+print('of the', len(months_active), 'omitted providers,', int((months_active.months_active == 12).sum()), 'report in all twelve months and', len(part), 'report in fewer than twelve;', int(part.continuous_run.sum()), 'of those', len(part), 'report in one unbroken run and', int((~part.continuous_run).sum()), 'has a gap. I cannot tell from the data why.')
+dist"""),
+    ("code", """# The ones that do not report all year, so I can see who they are and when. I do not know why they report fewer months.
+months_active[months_active.months_active < 12].sort_values(['months_active', 'attendances'], ascending=[True, False])"""),
+    ("md", "### NL7\nThe first-published October file had no NL7 row; the revised one added 3,565 attendances. I look at NL7 in every month, in the final files and in the first-published files I could retrieve."),
+    ("code", """prov, _ = c.read_msitae_monthly('msitae_provisional')
+prov['att'] = prov[c.ATT_COLS + c.BOOKED_COLS].sum(axis=1)
+months = sorted(m.month.unique())
+nl7 = pd.DataFrame({'final': m[m.org_code == 'NL7'].set_index('month').att,
+                    'first_published': prov[prov.org_code == 'NL7'].set_index('month').att}).reindex(months)
+nl7['first_published_file_retrieved'] = nl7.index.isin(prov.month.unique())
+n_cqi_rows = int((cqi.org_code == 'NL7').sum())
+print('NL7 rows anywhere in CQI, any measure:', n_cqi_rows)
+assert nl7.final.notna().all(), 'NL7 is missing from a final month'
+assert n_cqi_rows == 0
+nl7"""),
+    ("md", "## 2. Which department type do they mainly report under?\nI take each provider's largest attendance column (Type 1, Type 2 or Other A&E, booked attendances included) over the year. This is my classification from the sitrep columns; the data has no single type field."),
+    ("code", """yr = m[m.att > 0].groupby('org_code').agg(org_name=('org_name', 'first'), att=('att', 'sum'), over4=('over4', 'sum'),
+                                          t1=('att_t1', 'sum'), bk1=('bkd_t1', 'sum'), t2=('att_t2', 'sum'), bk2=('bkd_t2', 'sum'),
+                                          oth=('att_other', 'sum'), bko=('bkd_other', 'sum'), months=('month', 'nunique'))
+yr['type1'] = yr.t1 + yr.bk1; yr['type2'] = yr.t2 + yr.bk2; yr['other'] = yr.oth + yr.bko
+assert (yr.type1 + yr.type2 + yr.other == yr.att).all()
+yr['in_cqi'] = yr.index.isin(inc)
+yr['four_hour_pct'] = 100 * (1 - yr.over4 / yr.att)
+yr['main_type'] = yr[['type1', 'type2', 'other']].idxmax(axis=1).map({'type1': 'Type 1', 'type2': 'Type 2', 'other': 'Other A&E'})
+by_type = pd.crosstab(yr.in_cqi.map({True: 'in CQI', False: 'omitted from CQI'}), yr.main_type)
+by_type"""),
+    ("code", """# The sharper statement behind the crosstab: how many of the omitted attendances sit in each department column?
+g = m[m.org_code.isin(codes)]
+cols = {'Type 1': ['att_t1', 'bkd_t1'], 'Type 2': ['att_t2', 'bkd_t2'], 'Other A&E': ['att_other', 'bkd_other']}
+omit_by_col = pd.Series({k: int(g[v].sum().sum()) for k, v in cols.items()})
+print(omit_by_col.to_string(), '| total', int(omit_by_col.sum()))
+assert omit_by_col['Type 1'] == 0 and omit_by_col['Type 2'] == 0 and omit_by_col.sum() == int(omitted.att.sum())
+# Two providers report booked attendances only (no non-booked rows). I list them because a classification that ignores booked attendances loses them.
+y = m.groupby('org_code')[['att_t1', 'att_t2', 'att_other', 'bkd_t1', 'bkd_t2', 'bkd_other']].sum()
+booked_only = y[(y[['att_t1', 'att_t2', 'att_other']].sum(axis=1) == 0) & (y[['bkd_t1', 'bkd_t2', 'bkd_other']].sum(axis=1) > 0)].index.tolist()
+print('providers with booked attendances only:', booked_only, '| in CQI:', [o in inc for o in booked_only])"""),
+    ("code", """# The Type 1 and Type 2 providers among the omitted, so I know which they are.
+yr[(~yr.in_cqi) & (yr.main_type != 'Other A&E')][['org_name', 'att', 'main_type', 'four_hour_pct']]"""),
+    ("md", "## 3. The providers at 100% within four hours"),
+    ("code", """mm = m[m.org_code.isin(codes) & (m.att > 0)]
+zero_every_month = mm.groupby('org_code').over4.apply(lambda s: bool((s == 0).all()))
+z_om = yr[(~yr.in_cqi) & (yr.over4 == 0)]
+z_in = yr[yr.in_cqi & (yr.over4 == 0)]
+print('omitted providers with zero breaches in every month they report:', int(zero_every_month.sum()), 'of', len(zero_every_month))
+print('omitted providers with zero breaches across the whole year:', len(z_om), '| attendances', int(z_om.att.sum()))
+print('providers IN CQI with zero breaches across the whole year:', len(z_in), '| attendances', int(z_in.att.sum()))
+print('smallest monthly attendance among the omitted zero-breach providers:', int(mm[mm.org_code.isin(zero_every_month[zero_every_month].index)].att.min()))
+print()
+other_in = yr[yr.in_cqi & (yr.main_type == 'Other A&E')].four_hour_pct
+other_om = yr[(~yr.in_cqi) & (yr.main_type == 'Other A&E')].four_hour_pct
+summary = pd.DataFrame({'providers': [len(other_in), len(other_om)], 'median four-hour %': [other_in.median(), other_om.median()],
+                        'share at 99.9% or above': [(other_in >= 99.9).mean(), (other_om >= 99.9).mean()]},
+                       index=['Other A&E providers in CQI', 'Other A&E providers omitted from CQI'])
+summary"""),
+    ("md", "## 4. Does it matter for the 0.7 point finding?\nThe zero-breach figure may reflect how those sites record times. So I replace their breach count with an assumed four-hour rate and watch the gap. The gap is CQI-providers-only minus all-providers, as in notebook 04."),
+    ("code", """cqi_att, cqi_over = m[m.org_code.isin(inc)].att.sum(), m[m.org_code.isin(inc)].over4.sum()
+om_att, om_over = m[m.org_code.isin(codes)].att.sum(), m[m.org_code.isin(codes)].over4.sum()
+zs = yr[(~yr.in_cqi) & (yr.over4 == 0)]
+rows = []
+for assumed in [None, 99, 98, 95, 90]:
+    extra = 0 if assumed is None else zs.att.sum() * (1 - assumed / 100)
+    om_over_adj = om_over + extra
+    all_pct = 100 * (1 - (cqi_over + om_over_adj) / (cqi_att + om_att))
+    cqi_pct = 100 * (1 - cqi_over / cqi_att)
+    rows.append({'assumed four-hour % for the zero-breach omitted sites': 'as published' if assumed is None else assumed,
+                 'omitted group four-hour %': 100 * (1 - om_over_adj / om_att), 'all providers %': all_pct,
+                 'CQI providers only %': cqi_pct, 'gap (pp)': cqi_pct - all_pct})
+sens = pd.DataFrame(rows)
+sens"""),
+    ("code", """# The baseline row must reproduce notebook 04. Then I state what I expect: the gap stays beyond 0.6 points even at 90%.
+assert abs(sens['gap (pp)'].iloc[0] - (-0.707)) < 0.001
+assert (sens['gap (pp)'] < -0.6).all()
+months_active.reset_index().to_parquet(c.GOLD / 'omitted_months_active.parquet', index=False)
+nl7.reset_index().rename(columns={'index': 'month'}).to_parquet(c.GOLD / 'nl7_by_month.parquet', index=False)
+by_type.reset_index().rename(columns={'in_cqi': 'coverage'}).to_parquet(c.GOLD / 'provider_main_type_by_coverage.parquet', index=False)
+sens_out = sens.copy()
+sens_out.columns = ['assumed_rate_for_zero_breach_sites', 'omitted_group_pct', 'all_providers_pct', 'cqi_providers_only_pct', 'gap_pp']
+sens_out['assumed_rate_for_zero_breach_sites'] = sens_out.assumed_rate_for_zero_breach_sites.astype(str)
+sens_out.to_parquet(c.GOLD / 'zero_breach_sensitivity.parquet', index=False)
+print('The 0.7 point gap survives every assumption I tried.')"""),
+])
+
 print('built')
